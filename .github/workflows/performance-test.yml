@@ -9,7 +9,7 @@ on:
 env:
   DEVELOPER: leanhhoa30012004
   APP_VERSION: 1.0.0
-  CREATED_DATE: 2025-07-23 20:03:23 UTC
+  CREATED_DATE: 2025-07-23 20:09:09 UTC
 
 jobs:
   build-and-performance-test:
@@ -135,7 +135,7 @@ jobs:
           Commit Author: ${{ github.actor }}
           Developer: leanhhoa30012004
           Framework: Automation Performance Testing v1.0
-          Created: 2025-07-23 20:03:23 UTC
+          Created: 2025-07-23 20:09:09 UTC
           Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
           
           Test Information:
@@ -158,8 +158,8 @@ jobs:
           ==========================================
           EOF
           
-          # Create HTML email content
-          cat > email-content/email-body.html << 'HTMLEOF'
+          # Create HTML email content with current date
+          cat > email-content/email-body.html << EOF
           <!DOCTYPE html>
           <html>
           <head>
@@ -261,7 +261,7 @@ jobs:
                           <h4>🔧 Framework Info</h4>
                           <p><strong>Framework:</strong> Automation Performance Testing</p>
                           <p><strong>Version:</strong> 1.0.0</p>
-                          <p><strong>Created:</strong> 2025-07-23 20:03:23 UTC</p>
+                          <p><strong>Created:</strong> 2025-07-23 20:09:09 UTC</p>
                       </div>
           
                       <div class="info-card">
@@ -307,10 +307,10 @@ jobs:
               </div>
           </body>
           </html>
-          HTMLEOF
+          EOF
           
           # Create plain text email content
-          cat > email-content/email-body.txt << 'TXTEOF'
+          cat > email-content/email-body.txt << EOF
           Automation Performance Test Results
           ===================================
           
@@ -324,7 +324,7 @@ jobs:
           Framework Information:
           - Name: Automation Performance Testing with GitHub Action
           - Version: 1.0.0
-          - Created: 2025-07-23 20:03:23 UTC
+          - Created: 2025-07-23 20:09:09 UTC
           - Repository: automation-performance-testing-with-github-action
           
           Test Execution Summary:
@@ -348,7 +348,7 @@ jobs:
           Automation Performance Testing Framework
           Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
           ===================================
-          TXTEOF
+          EOF
 
       - name: Upload performance reports as artifacts
         uses: actions/upload-artifact@v4
@@ -359,8 +359,8 @@ jobs:
             app.log
           retention-days: 30
 
-      # Option 1: Fixed Gmail Configuration
-      - name: Send email notification via Gmail (Primary)
+      # Fixed Gmail Configuration - Proper conditional syntax
+      - name: Send email notification via Gmail
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -381,52 +381,44 @@ jobs:
             final-reports/*.html
             final-reports/*.csv
         continue-on-error: true
-        if: ${{ secrets.SMTP_USERNAME && secrets.SMTP_PASSWORD }}
 
-      # Option 2: Alternative SMTP (Backup)
-      - name: Send email notification via Alternative SMTP (Backup)
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.office365.com
-          server_port: 587
-          secure: true
-          username: ${{ secrets.ALT_SMTP_USERNAME }}
-          password: ${{ secrets.ALT_SMTP_PASSWORD }}
-          subject: |
-            🚀 Performance Test Results - ${{ github.repository }} [${{ github.ref_name }}] - ${{ github.actor }}
-          html_body: file://email-content/email-body.html
-          body: file://email-content/email-body.txt
-          to: |
-            leanhhoa30012004@gmail.com
-            ${{ github.actor }}@users.noreply.github.com
-          from: Automation Performance Bot <${{ secrets.ALT_SMTP_USERNAME }}>
-          attachments: |
-            final-reports/test-summary.txt
-        continue-on-error: true
-        if: ${{ !secrets.SMTP_USERNAME && secrets.ALT_SMTP_USERNAME }}
-
-      # Option 3: Webhook Notification (Fallback)
-      - name: Send notification via Webhook (Fallback)
+      # Alternative notification methods
+      - name: Send notification via Webhook (if email fails)
         run: |
-          echo "📧 Sending webhook notification as email fallback..."
+          echo "📧 Attempting webhook notification as backup..."
           
+          # Create webhook payload
+          WEBHOOK_PAYLOAD=$(cat << EOF
+          {
+            "repository": "${{ github.repository }}",
+            "branch": "${{ github.ref_name }}",
+            "commit": "${{ github.sha }}",
+            "commit_author": "${{ github.actor }}",
+            "developer": "leanhhoa30012004",
+            "framework": "Automation Performance Testing v1.0",
+            "status": "completed",
+            "timestamp": "$(date -u '+%Y-%m-%d %H:%M:%S UTC')",
+            "reports_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+            "commit_url": "https://github.com/${{ github.repository }}/commit/${{ github.sha }}",
+            "message": "Automation performance testing completed successfully"
+          }
+          EOF
+          )
+          
+          # Try webhook if URL is available
           if [ "${{ secrets.WEBHOOK_URL }}" != "" ]; then
+            echo "Sending webhook notification..."
             curl -X POST "${{ secrets.WEBHOOK_URL }}" \
               -H "Content-Type: application/json" \
-              -d '{
-                "repository": "${{ github.repository }}",
-                "branch": "${{ github.ref_name }}",
-                "commit": "${{ github.sha }}",
-                "author": "${{ github.actor }}",
-                "developer": "leanhhoa30012004",
-                "framework": "Automation Performance Testing v1.0",
-                "status": "completed",
-                "reports_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-                "timestamp": "$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-              }' || echo "Webhook notification failed"
+              -d "$WEBHOOK_PAYLOAD" \
+              --connect-timeout 10 \
+              --max-time 30 || echo "Webhook notification failed"
           else
-            echo "No webhook URL configured, skipping webhook notification"
+            echo "No webhook URL configured"
           fi
+          
+          # Log notification attempt
+          echo "Notification attempt completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
         continue-on-error: true
 
       - name: Comment PR with performance results (if PR)
@@ -443,7 +435,7 @@ jobs:
             comment += '**👤 Author:** ${{ github.actor }}\n';
             comment += '**👨‍💻 Developer:** leanhhoa30012004\n';
             comment += '**🚀 Framework:** Automation Performance Testing v1.0\n';
-            comment += '**📅 Created:** 2025-07-23 20:03:23 UTC\n';
+            comment += '**📅 Created:** 2025-07-23 20:09:09 UTC\n';
             comment += '**⏰ Tested:** ' + new Date().toISOString() + '\n\n';
             
             comment += '### 🎯 Test Execution Summary\n';
@@ -486,41 +478,26 @@ jobs:
               body: comment
             });
 
-      - name: Create email notification summary
+      - name: Create notification summary
         run: |
-          echo "📧 Email Notification Summary"
-          echo "============================="
+          echo "📧 Email & Notification Summary"
+          echo "==============================="
           echo "Time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo "Developer: leanhhoa30012004"
           echo "Repository: ${{ github.repository }}"
           echo "Commit Author: ${{ github.actor }}"
           echo "Framework: Automation Performance Testing v1.0"
           echo ""
-          
-          if [ "${{ secrets.SMTP_USERNAME }}" != "" ]; then
-            echo "✅ Primary email notification: Attempted via Gmail SMTP"
-            echo "📧 Target: leanhhoa30012004@gmail.com, ${{ github.actor }}@users.noreply.github.com"
-          else
-            echo "⚠️ Primary email notification: Skipped (No Gmail credentials)"
-          fi
-          
-          if [ "${{ secrets.ALT_SMTP_USERNAME }}" != "" ]; then
-            echo "✅ Backup email notification: Available via Alternative SMTP"
-          else
-            echo "⚠️ Backup email notification: Not configured"
-          fi
-          
-          if [ "${{ secrets.WEBHOOK_URL }}" != "" ]; then
-            echo "✅ Webhook notification: Attempted"
-          else
-            echo "⚠️ Webhook notification: Not configured"
-          fi
-          
+          echo "📧 Email notification: Attempted via Gmail SMTP"
+          echo "📧 Target recipients:"
+          echo "   - leanhhoa30012004@gmail.com"
+          echo "   - ${{ github.actor }}@users.noreply.github.com"
           echo ""
           echo "📊 Reports: Generated and uploaded as artifacts"
           echo "🔗 View reports: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo ""
-          echo "============================="
+          echo "✅ Notification process completed"
+          echo "==============================="
 
       - name: Final summary
         run: |
@@ -533,11 +510,11 @@ jobs:
           echo "📝 Commit: ${{ github.sha }}"
           echo "👤 Author: ${{ github.actor }}"
           echo "🚀 Framework: Automation Performance Testing v1.0"
-          echo "📅 Created: 2025-07-23 20:03:23 UTC"
+          echo "📅 Created: 2025-07-23 20:09:09 UTC"
           echo "⏰ Completed: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
           echo ""
           echo "✅ Application tested successfully"
           echo "📊 Performance reports generated"
-          echo "📧 Email notifications sent"
+          echo "📧 Email notifications attempted"
           echo "🎯 All tests completed"
           echo "=========================================="
