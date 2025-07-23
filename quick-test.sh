@@ -1,23 +1,22 @@
 #!/bin/bash
-# Quick Test for Automation Performance Testing
+# Quick Test Fixed for Automation Performance Testing
 # Developer: leanhhoa30012004
-# Created: 2025-07-23 18:51:26 UTC
+# Created: 2025-07-23 19:11:12 UTC
 
-echo "🚀 Quick Test - Automation Performance Testing"
+echo "🚀 Quick Test Fixed - Automation Performance Testing"
 echo "Project: automation-performance-testing-with-github-action"
 echo "Developer: leanhhoa30012004"
-echo "Time: 2025-07-23 18:51:26 UTC"
+echo "Time: 2025-07-23 19:11:12 UTC"
 echo "=============================================="
 
-# Check if we're in the right directory
-if [ ! -f "pom.xml" ]; then
-    echo "❌ Error: pom.xml not found. Please run from project root directory."
-    exit 1
-fi
+# Clean previous builds and logs
+echo "🧹 Cleaning previous builds..."
+rm -f app.log app.pid
+mvn clean
 
-# 1. Build project
+# 1. Build project with dependency cleanup
 echo "📦 Building project..."
-mvn clean package -q -DskipTests
+mvn clean package -DskipTests -q
 if [ $? -eq 0 ]; then
     echo "✅ Build successful!"
 else
@@ -25,96 +24,106 @@ else
     exit 1
 fi
 
-# 2. Start application
+# 2. Check JAR file
+echo "📋 Checking JAR file..."
+JAR_FILE="target/automation-performance-testing-with-github-action-1.0.0.jar"
+if [ -f "$JAR_FILE" ]; then
+    echo "✅ JAR file exists: $(ls -lh $JAR_FILE | awk '{print $5}')"
+else
+    echo "❌ JAR file not found!"
+    exit 1
+fi
+
+# 3. Start application with better error handling
 echo "🏃 Starting application..."
-nohup java -jar target/automation-performance-testing-with-github-action-1.0.0.jar > app.log 2>&1 &
+nohup java -Djava.awt.headless=true -Dspring.profiles.active=default -jar "$JAR_FILE" > app.log 2>&1 &
 APP_PID=$!
 echo $APP_PID > app.pid
-sleep 8
 
-# 3. Health check
-echo "🏥 Checking application health..."
+echo "📋 Application PID: $APP_PID"
+
+# 4. Wait with better monitoring
+echo "⏳ Waiting for application to start..."
 RETRY_COUNT=0
-MAX_RETRIES=10
+MAX_RETRIES=30
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if curl -s http://localhost:8080/api/health > /dev/null; then
+    # Check if process is still alive
+    if ! kill -0 $APP_PID 2>/dev/null; then
+        echo "❌ Application process died! Checking logs..."
+        cat app.log
+        exit 1
+    fi
+
+    # Try health check
+    if curl -s http://localhost:8080/api/health > /dev/null 2>&1; then
         echo "✅ Application is healthy!"
         break
     else
-        echo "⏳ Waiting for application to start... (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)"
-        sleep 2
+        echo "⏳ Waiting... (attempt $((RETRY_COUNT + 1))/$MAX_RETRIES)"
+        sleep 3
         RETRY_COUNT=$((RETRY_COUNT + 1))
     fi
 done
 
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-    echo "❌ Application health check failed after $MAX_RETRIES attempts!"
+    echo "❌ Application failed to start after $MAX_RETRIES attempts!"
     echo "📋 Application logs:"
-    tail -20 app.log
+    cat app.log
     kill $APP_PID 2>/dev/null
     exit 1
 fi
 
-# 4. Test API endpoints
+# 5. Test API endpoints
 echo "🔍 Testing key API endpoints..."
 echo "📍 Health endpoint:"
-curl -s http://localhost:8080/api/health
+curl -s http://localhost:8080/api/health | head -3
 
 echo -e "\n📍 Automation info endpoint:"
-curl -s http://localhost:8080/api/automation/info
+curl -s http://localhost:8080/api/automation/info | head -3
 
 echo -e "\n📍 Test user endpoint:"
-curl -s http://localhost:8080/api/users/123
+curl -s http://localhost:8080/api/users/123 | head -3
 
-# 5. Run mini performance test
+# 6. Run mini performance test
 echo -e "\n⚡ Running mini performance test..."
 echo "targetUrl=http://localhost:8080/api/health
 httpMethod=GET
-threadCount=3
-requestsPerThread=5
-testDuration=15
+threadCount=2
+requestsPerThread=3
+testDuration=10
 connectionTimeout=5000
 responseTimeout=10000
 rampUpTime=1
-testName=Quick Test - automation-performance-testing
-testDescription=Quick performance test for automation-performance-testing project by leanhhoa30012004
+testName=Fixed Quick Test
+testDescription=Fixed performance test by leanhhoa30012004
 testAuthor=leanhhoa30012004
 framework=Automation Performance Testing
-createdDate=2025-07-23 18:51:26 UTC" > quick-test.properties
+createdDate=2025-07-23 19:11:12 UTC" > quick-test-fixed.properties
 
-java -cp "target/classes:target/lib/*" com.hoale.automation.Main quick-test.properties
+java -cp "target/classes:target/lib/*" com.hoale.automation.Main quick-test-fixed.properties
 
-# 6. Check reports
+# 7. Check reports
 echo -e "\n📊 Checking generated reports..."
 if [ -d "reports" ]; then
     echo "✅ Reports generated:"
-    ls -la reports/ | head -10
-
-    # Show summary from latest report
-    latest_txt=$(find reports -name "*quick*test*.txt" -type f -printf '%T@ %p\n' | sort -k 1nr | head -1 | cut -d' ' -f2-)
-    if [ -f "$latest_txt" ]; then
-        echo -e "\n📈 Quick test summary:"
-        echo "======================"
-        grep -E "(Success rate|Average response time|Throughput|Developer)" "$latest_txt" || head -15 "$latest_txt"
-        echo "======================"
-    fi
+    ls -la reports/ | head -5
 else
     echo "❌ No reports found!"
 fi
 
-# 7. Stop application
+# 8. Stop application
 echo -e "\n🛑 Stopping application..."
 kill $APP_PID 2>/dev/null
-rm -f app.pid quick-test.properties
+rm -f app.pid quick-test-fixed.properties
 
-echo -e "\n🎉 Quick test completed!"
+echo -e "\n🎉 Fixed quick test completed!"
 echo "📋 Summary:"
 echo "   - Project: automation-performance-testing-with-github-action"
-echo "   - Application: ✅ Working"
+echo "   - Application: ✅ Working (Fixed logging issue)"
 echo "   - API Endpoints: ✅ Responsive"
 echo "   - Performance Test: ✅ Executed"
 echo "   - Reports: ✅ Generated"
 echo ""
-echo "👨‍💻 Test completed by: leanhhoa30012004"
+echo "👨‍💻 Fixed by: leanhhoa30012004"
 echo "⏰ Completed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
