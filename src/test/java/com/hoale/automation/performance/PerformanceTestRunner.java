@@ -2,64 +2,46 @@ package com.hoale.automation.performance;
 
 import com.hoale.automation.performance.config.PerformanceConfig;
 import com.hoale.automation.performance.model.TestResult;
-import com.hoale.automation.performance.report.PerformanceReportGenerator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Performance Test Runner
- * Main entry point for running performance tests
  *
  * @author leanhhoa30012004
- * @created 2025-07-23 18:32:45 UTC
+ * @created 2025-07-23 19:24:30 UTC
  */
 public class PerformanceTestRunner {
-    private static final Logger logger = LoggerFactory.getLogger(PerformanceTestRunner.class);
 
     public static void main(String[] args) {
         if (args.length == 0) {
-            logger.error("Usage: java PerformanceTestRunner <config-file>");
-            logger.error("Example: java PerformanceTestRunner performance-config/api-performance.properties");
+            System.err.println("Usage: java PerformanceTestRunner <config-file>");
             System.exit(1);
         }
 
-        String configFile = args[0];
-        logger.info("========================================");
-        logger.info("Starting Hoale Automation Performance Test");
-        logger.info("Developer: leanhhoa30012004");
-        logger.info("Created: 2025-07-23 18:32:45 UTC");
-        logger.info("Framework: Hoale Automation Performance Test Engine v1.0");
-        logger.info("Config file: {}", configFile);
-        logger.info("========================================");
-
         try {
-            // Load configuration
-            PerformanceConfig config = PerformanceConfig.load(configFile);
+            System.out.println("🚀 Starting Performance Test");
+            System.out.println("Developer: leanhhoa30012004");
+            System.out.println("Config: " + args[0]);
 
-            // Run performance test
+            PerformanceConfig config = PerformanceConfig.load(args[0]);
             PerformanceTestEngine engine = new PerformanceTestEngine(config);
             TestResult result = engine.runTest();
 
-            // Generate reports
-            logger.info("Generating performance reports...");
-            PerformanceReportGenerator reportGenerator = new PerformanceReportGenerator(config, result);
-            reportGenerator.generateAllReports();
+            System.out.println("📊 Test Results:");
+            System.out.println("Total requests: " + result.getTotalRequests());
+            System.out.println("Success rate: " + String.format("%.2f%%", result.getSuccessRate()));
+            System.out.println("Average response time: " + String.format("%.2fms", result.getAverageResponseTime()));
 
-            // Exit with appropriate code based on results
-            if (result.getSuccessRate() < 95.0) {
-                logger.error("Hoale Automation Performance test FAILED: Success rate {} is below threshold", result.getSuccessRate());
-                logger.error("Please check the generated reports for detailed analysis");
-                System.exit(1);
-            } else {
-                logger.info("Hoale Automation Performance test PASSED successfully");
-                logger.info("Success rate: {}%, Average response time: {}ms",
-                        String.format("%.2f", result.getSuccessRate()),
-                        String.format("%.2f", result.getAverageResponseTime()));
+            if (result.getSuccessRate() >= 95.0) {
+                System.out.println("✅ Performance test PASSED");
                 System.exit(0);
+            } else {
+                System.out.println("❌ Performance test FAILED");
+                System.exit(1);
             }
 
         } catch (Exception e) {
-            logger.error("Hoale Automation Performance test execution failed", e);
+            System.err.println("❌ Test execution failed: " + e.getMessage());
+            e.printStackTrace();
             System.exit(1);
         }
     }

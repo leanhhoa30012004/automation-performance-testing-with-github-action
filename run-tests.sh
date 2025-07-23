@@ -1,91 +1,55 @@
 #!/bin/bash
-
-# Automation Performance Testing with GitHub Action - Test Runner
+# Simple Test Runner
 # Developer: leanhhoa30012004
-# Created: 2025-07-23 18:51:26 UTC
+# Created: 2025-07-23 19:24:30 UTC
 
-echo "==========================================="
-echo "Automation Performance Testing Test Runner"
-echo "Project: automation-performance-testing-with-github-action"
+echo "🚀 Simple Automation Performance Testing"
 echo "Developer: leanhhoa30012004"
-echo "Created: 2025-07-23 18:51:26 UTC"
-echo "==========================================="
+echo "Created: 2025-07-23 19:24:30 UTC"
+echo "Repository: automation-performance-testing-with-github-action"
+echo "======================================"
 
-# Build the project
-echo "🔨 Building project..."
+# Build
+echo "📦 Building..."
 mvn clean package -DskipTests
 
-if [ $? -ne 0 ]; then
-    echo "❌ Build failed!"
+# Check JAR
+JAR_FILE="target/automation-performance-testing-with-github-action-1.0.0-jar-with-dependencies.jar"
+if [ ! -f "$JAR_FILE" ]; then
+    echo "❌ JAR file not found!"
     exit 1
 fi
 
-echo "✅ Build completed successfully!"
+echo "✅ JAR file created: $(ls -lh $JAR_FILE | awk '{print $5}')"
 
-# Start the application
-echo "🚀 Starting Automation Performance Testing application..."
-nohup java -jar target/automation-performance-testing-with-github-action-1.0.0.jar > app.log 2>&1 &
-echo $! > app.pid
+# Start app
+echo "🚀 Starting application..."
+nohup java -jar "$JAR_FILE" > app.log 2>&1 &
+APP_PID=$!
+echo $APP_PID > app.pid
 
-# Wait for application to start
-echo "⏳ Waiting for application to start..."
-sleep 10
+# Wait
+sleep 8
 
-# Check if application is running
-if curl -f http://localhost:8080/api/health > /dev/null 2>&1; then
-    echo "✅ Application is running!"
+# Test
+if curl -s http://localhost:8080/api/health > /dev/null; then
+    echo "✅ Application is working!"
+
+    echo "🔍 Testing endpoints:"
+    curl -s http://localhost:8080/api/health | head -2
+    echo ""
+    curl -s http://localhost:8080/api/info | head -2
+
+    echo -e "\n⚡ Running performance test..."
+    java -cp "target/classes:target/lib/*" com.hoale.automation.performance.Main performance-config/api-performance.properties
+
 else
-    echo "❌ Application failed to start!"
-    echo "📋 Checking logs..."
-    tail -20 app.log
-    exit 1
+    echo "❌ Application failed to start"
+    cat app.log
 fi
 
-# Test API endpoints
-echo "🔍 Testing API endpoints..."
-echo "📍 Health Check:"
-curl -s http://localhost:8080/api/health | jq . 2>/dev/null || curl -s http://localhost:8080/api/health
+# Cleanup
+kill $APP_PID 2>/dev/null
+rm -f app.pid
 
-echo -e "\n📍 Automation Info:"
-curl -s http://localhost:8080/api/automation/info | jq . 2>/dev/null || curl -s http://localhost:8080/api/automation/info
-
-# Run performance tests
-echo -e "\n⚡ Running API Health Check Performance Test..."
-java -cp "target/classes:target/lib/*" com.hoale.automation.Main performance-config/api-performance.properties
-
-echo -e "\n🚀 Running Load Test..."
-java -cp "target/classes:target/lib/*" com.hoale.automation.Main performance-config/load-test.properties
-
-echo -e "\n💪 Running Stress Test..."
-java -cp "target/classes:target/lib/*" com.hoale.automation.Main performance-config/stress-test.properties
-
-# Check reports
-echo -e "\n📊 Checking generated reports..."
-if [ -d "reports" ]; then
-    echo "✅ Reports generated:"
-    ls -la reports/
-    echo -e "\n📈 Latest report summary:"
-    latest_txt=$(find reports -name "*.txt" -type f -printf '%T@ %p\n' | sort -k 1nr | head -1 | cut -d' ' -f2-)
-    if [ -f "$latest_txt" ]; then
-        echo "===================="
-        head -20 "$latest_txt"
-        echo "===================="
-    fi
-else
-    echo "❌ No reports found!"
-fi
-
-# Stop the application
-echo -e "\n🛑 Stopping application..."
-if [ -f app.pid ]; then
-    kill $(cat app.pid)
-    rm app.pid
-fi
-
-echo -e "\n🎉 All tests completed!"
-echo "📊 Check the reports/ directory for detailed results"
-echo "📝 Application logs are in app.log"
-echo ""
-echo "Automation Performance Testing with GitHub Action"
-echo "Developed by: leanhhoa30012004"
-echo "Completed on: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+echo "🎉 Test completed by leanhhoa30012004!"

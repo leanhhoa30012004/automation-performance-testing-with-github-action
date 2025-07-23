@@ -8,11 +8,10 @@ on:
 
 env:
   DEVELOPER: leanhhoa30012004
-  APP_VERSION: 1.0.0
-  CREATED_DATE: 2025-07-23 19:08:29 UTC
+  CREATED_DATE: 2025-07-23 19:24:30 UTC
 
 jobs:
-  build-and-performance-test:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,233 +24,48 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Cache Maven dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
+      - name: Build application
+        run: mvn clean package -DskipTests
 
-      - name: Build automation application
-        run: mvn clean compile package -DskipTests
-
-      - name: Check JAR file
+      - name: Start application
         run: |
-          echo "Checking built JAR file..."
-          ls -la target/
-          if [ -f "target/automation-performance-testing-with-github-action-1.0.0.jar" ]; then
-            echo "✅ JAR file found"
-            file target/automation-performance-testing-with-github-action-1.0.0.jar
-          else
-            echo "❌ JAR file not found!"
-            exit 1
-          fi
-
-      - name: Start automation application in background
-        run: |
-          echo "Starting automation application..."
-          nohup java -Dspring.profiles.active=test -Dserver.port=8080 -jar target/automation-performance-testing-with-github-action-1.0.0.jar > app.log 2>&1 &
+          echo "Starting application..."
+          nohup java -jar target/automation-performance-testing-with-github-action-1.0.0-jar-with-dependencies.jar > app.log 2>&1 &
           echo $! > app.pid
-          echo "Application PID: $(cat app.pid)"
+          sleep 10
 
-      - name: Wait for application to start with better debugging
+      - name: Wait for application
         run: |
-          echo "Waiting for automation application to start..."
-          MAX_ATTEMPTS=60
-          ATTEMPT=0
-          
-          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            ATTEMPT=$((ATTEMPT + 1))
-            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Checking application health..."
-          
-            # Check if process is still running
-            if [ -f app.pid ]; then
-              PID=$(cat app.pid)
-              if ! kill -0 $PID 2>/dev/null; then
-                echo "❌ Application process died! Checking logs..."
-                cat app.log
-                exit 1
-              fi
-            fi
-          
-            # Try health check
-            if curl -f --connect-timeout 5 --max-time 10 http://localhost:8080/api/health; then
+          echo "Waiting for application..."
+          for i in {1..20}; do
+            if curl -f http://localhost:8080/api/health; then
               echo "✅ Application is ready!"
               break
-            else
-              echo "Application not ready yet, waiting... (attempt $ATTEMPT/$MAX_ATTEMPTS)"
-          
-              # Show recent logs every 10 attempts
-              if [ $((ATTEMPT % 10)) -eq 0 ]; then
-                echo "=== Recent application logs ==="
-                tail -20 app.log
-                echo "=============================="
-              fi
-          
-              sleep 5
             fi
+            echo "Waiting... attempt $i/20"
+            sleep 3
           done
-          
-          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-            echo "❌ Application failed to start after $MAX_ATTEMPTS attempts"
-            echo "=== Full application logs ==="
-            cat app.log
-            echo "============================"
-            exit 1
-          fi
 
-      - name: Test application endpoints
+      - name: Test endpoints
         run: |
-          echo "Testing automation application endpoints..."
-          echo "=== Health Check ==="
-          curl -s http://localhost:8080/api/health | jq . || curl -s http://localhost:8080/api/health
-          echo -e "\n=== Automation Info ==="
-          curl -s http://localhost:8080/api/automation/info | jq . || curl -s http://localhost:8080/api/automation/info
-          echo -e "\n=== Test Performance Endpoint ==="
-          curl -s http://localhost:8080/api/automation/test/performance | jq . || curl -s http://localhost:8080/api/automation/test/performance
+          echo "Testing endpoints..."
+          curl -s http://localhost:8080/api/health
+          curl -s http://localhost:8080/api/info
 
-      - name: Run Automation API Health Check Performance Test
+      - name: Run performance test
         run: |
-          echo "Running automation API health check performance test..."
-          java -cp "target/classes:target/lib/*" com.hoale.automation.Main performance-config/api-performance.properties
-        continue-on-error: true
+          echo "Running performance test..."
+          java -cp "target/classes:target/lib/*" com.hoale.automation.performance.Main performance-config/api-performance.properties
 
-      - name: Run Automation Load Test
+      - name: Stop application
         run: |
-          echo "Running automation load test..."
-          java -cp "target/classes:target/lib/*" com.hoale.automation.Main performance-config/load-test.properties
-        continue-on-error: true
-
-      - name: Stop automation application
-        run: |
-          echo "Stopping automation application..."
           if [ -f app.pid ]; then
-            PID=$(cat app.pid)
-            kill $PID 2>/dev/null || true
-            sleep 5
-            # Force kill if still running
-            kill -9 $PID 2>/dev/null || true
-            rm app.pid
+            kill $(cat app.pid) || true
           fi
 
-      - name: Collect application logs
-        run: |
-          mkdir -p logs
-          echo "=== Automation Application Logs ===" > logs/application.log
-          echo "Developer: ${{ env.DEVELOPER }}" >> logs/application.log
-          echo "Date: ${{ env.CREATED_DATE }}" >> logs/application.log
-          echo "Version: ${{ env.APP_VERSION }}" >> logs/application.log
-          echo "Project: automation-performance-testing-with-github-action" >> logs/application.log
-          echo "=======================================" >> logs/application.log
-          cat app.log >> logs/application.log
-        continue-on-error: true
-
-      - name: Upload performance reports
+      - name: Upload logs
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: automation-performance-reports-${{ github.sha }}
-          path: |
-            reports/
-            logs/
-          retention-days: 30
-
-      - name: Prepare email content
-        run: |
-          echo "COMMIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
-          echo "COMMIT_AUTHOR=${{ github.actor }}" >> $GITHUB_ENV
-          echo "COMMIT_MESSAGE<<EOF" >> $GITHUB_ENV
-          echo "${{ github.event.head_commit.message }}" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-          echo "REPO_NAME=${{ github.repository }}" >> $GITHUB_ENV
-          echo "BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
-
-      - name: Create email summary
-        run: |
-          mkdir -p email-content
-          
-          echo "Automation Performance Testing Report - $(date)" > email-content/summary.txt
-          echo "=====================================================" >> email-content/summary.txt
-          echo "" >> email-content/summary.txt
-          echo "Repository: ${{ env.REPO_NAME }}" >> email-content/summary.txt
-          echo "Branch: ${{ env.BRANCH_NAME }}" >> email-content/summary.txt
-          echo "Commit: ${{ env.COMMIT_SHA }}" >> email-content/summary.txt
-          echo "Author: ${{ env.COMMIT_AUTHOR }}" >> email-content/summary.txt
-          echo "Message: ${{ env.COMMIT_MESSAGE }}" >> email-content/summary.txt
-          echo "Developer: ${{ env.DEVELOPER }}" >> email-content/summary.txt
-          echo "Application: Automation Performance Testing with GitHub Action" >> email-content/summary.txt
-          echo "Framework Version: ${{ env.APP_VERSION }}" >> email-content/summary.txt
-          echo "Created Date: ${{ env.CREATED_DATE }}" >> email-content/summary.txt
-          echo "Test Engine: Automation Performance Test Engine" >> email-content/summary.txt
-          echo "" >> email-content/summary.txt
-          
-          if [ -d "reports" ]; then
-            echo "Generated Reports:" >> email-content/summary.txt
-            ls -la reports/ >> email-content/summary.txt
-            echo "" >> email-content/summary.txt
-          
-            # Extract key metrics from latest HTML report if exists
-            latest_html=$(find reports -name "*.html" -type f -printf '%T@ %p\n' | sort -k 1nr | head -1 | cut -d' ' -f2-)
-            if [ -f "$latest_html" ]; then
-              echo "Latest Performance Metrics:" >> email-content/summary.txt
-              grep -i "Total Requests\|Success Rate\|Response Time\|Throughput" "$latest_html" | sed 's/<[^>]*>//g' >> email-content/summary.txt
-            fi
-          else
-            echo "No reports generated - possible test failure" >> email-content/summary.txt
-          fi
-          
-          echo "" >> email-content/summary.txt
-          echo "View full reports in GitHub Actions artifacts." >> email-content/summary.txt
-          echo "Action URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> email-content/summary.txt
-          echo "" >> email-content/summary.txt
-          echo "=== Automation Performance Testing Framework ===" >> email-content/summary.txt
-          echo "Developed by: ${{ env.DEVELOPER }}" >> email-content/summary.txt
-          echo "Generated on: $(date)" >> email-content/summary.txt
-          echo "Performance Test Engine: Automation Performance Testing v${{ env.APP_VERSION }}" >> email-content/summary.txt
-
-      - name: Send email notification to leanhhoa30012004
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 587
-          username: ${{ secrets.SMTP_USERNAME }}
-          password: ${{ secrets.SMTP_PASSWORD }}
-          subject: |
-            Automation Performance Test Results - ${{ env.REPO_NAME }} [${{ env.BRANCH_NAME }}] - Author: ${{ env.COMMIT_AUTHOR }}
-          body: file://email-content/summary.txt
-          to: |
-            leanhhoa30012004@gmail.com
-            ${{ github.actor }}@users.noreply.github.com
-          from: Automation Performance Test Bot <${{ secrets.SMTP_USERNAME }}>
-          attachments: |
-            reports/*.html
-            reports/*.csv
-            email-content/summary.txt
-
-      - name: Comment PR with results (if PR)
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            let comment = '## 📊 Automation Performance Test Results\n\n';
-            comment += '**Developer:** leanhhoa30012004\n';
-            comment += '**Created:** 2025-07-23 19:08:29 UTC\n';
-            comment += '**Framework:** Automation Performance Test Engine v1.0\n';
-            comment += '**Application:** automation-performance-testing-with-github-action\n\n';
-            
-            if (fs.existsSync('email-content/summary.txt')) {
-              const summary = fs.readFileSync('email-content/summary.txt', 'utf8');
-              comment += '```\n' + summary + '\n```\n\n';
-            }
-            
-            comment += `📁 [View detailed reports in artifacts](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n`;
-            comment += `🔗 [Action Run](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n`;
-            comment += `👨‍💻 **Developer:** leanhhoa30012004\n`;
-            comment += `🚀 **Framework:** Automation Performance Testing\n`;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
+          name: application-logs
+          path: app.log

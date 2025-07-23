@@ -3,13 +3,6 @@
 
 # Log files
 *.log
-logs/
-
-# BlueJ files
-*.ctxt
-
-# Mobile Tools for Java (J2ME)
-.mtj.tmp/
 
 # Package Files
 *.jar
@@ -20,9 +13,6 @@ logs/
 *.tar.gz
 *.rar
 
-# Virtual machine crash logs
-hs_err_pid*
-
 # Maven
 target/
 pom.xml.tag
@@ -32,8 +22,6 @@ pom.xml.next
 release.properties
 dependency-reduced-pom.xml
 buildNumber.properties
-.mvn/timing.properties
-.mvn/wrapper/maven-wrapper.jar
 
 # IDE files
 .idea/
@@ -41,8 +29,6 @@ buildNumber.properties
 *.iml
 *.ipr
 .vscode/
-*.swp
-*.swo
 
 # OS generated files
 .DS_Store
@@ -53,17 +39,9 @@ buildNumber.properties
 ehthumbs.db
 Thumbs.db
 
-# Performance test reports
+# Application specific
+app.pid
 reports/
 
-# Application logs
-app.log
-*.pid
-
-# Temporary files
-*.tmp
-*.temp
-email-content/
-
-# Developer specific
-# Created by leanhhoa30012004 on 2025-07-23 18:43:23 UTC
+# Developer: leanhhoa30012004
+# Created: 2025-07-23 19:24:30 UTC
