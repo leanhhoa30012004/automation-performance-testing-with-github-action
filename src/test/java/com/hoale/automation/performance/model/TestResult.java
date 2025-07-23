@@ -6,10 +6,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Test Result Model
+ * Enhanced Test Result Model with additional metrics
  *
  * @author leanhhoa30012004
- * @created 2025-07-23 19:24:30 UTC
+ * @created 2025-07-23 19:52:31 UTC
  */
 public class TestResult {
 
@@ -27,23 +27,23 @@ public class TestResult {
             successfulRequests.incrementAndGet();
         }
         totalResponseTime.addAndGet(responseTime);
-        
+
         // Update min/max response times
-        updateMinResponseTime(responseTime);
-        updateMaxResponseTime(responseTime);
+        updateMin(responseTime);
+        updateMax(responseTime);
     }
 
-    private void updateMinResponseTime(long responseTime) {
-        long current = minResponseTime.get();
-        while (responseTime < current && !minResponseTime.compareAndSet(current, responseTime)) {
-            current = minResponseTime.get();
+    private void updateMin(long responseTime) {
+        long currentMin = minResponseTime.get();
+        while (responseTime < currentMin && !minResponseTime.compareAndSet(currentMin, responseTime)) {
+            currentMin = minResponseTime.get();
         }
     }
 
-    private void updateMaxResponseTime(long responseTime) {
-        long current = maxResponseTime.get();
-        while (responseTime > current && !maxResponseTime.compareAndSet(current, responseTime)) {
-            current = maxResponseTime.get();
+    private void updateMax(long responseTime) {
+        long currentMax = maxResponseTime.get();
+        while (responseTime > currentMax && !maxResponseTime.compareAndSet(currentMax, responseTime)) {
+            currentMax = maxResponseTime.get();
         }
     }
 
@@ -65,9 +65,8 @@ public class TestResult {
         if (startTime == null || endTime == null) {
             return 0.0;
         }
-        
         Duration duration = Duration.between(startTime, endTime);
-        double seconds = duration.getSeconds() + duration.getNano() / 1_000_000_000.0;
+        double seconds = duration.toMillis() / 1000.0;
         return seconds > 0 ? totalRequests.get() / seconds : 0.0;
     }
 

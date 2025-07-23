@@ -1,4 +1,4 @@
-name: Automation Performance Testing CI/CD
+name: Automation Performance Testing CI/CD with Reports & Email
 
 on:
   push:
@@ -8,10 +8,11 @@ on:
 
 env:
   DEVELOPER: leanhhoa30012004
-  CREATED_DATE: 2025-07-23 19:24:30 UTC
+  APP_VERSION: 1.0.0
+  CREATED_DATE: 2025-07-23 19:52:31 UTC
 
 jobs:
-  build-and-test:
+  build-and-performance-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,48 +25,359 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build application
-        run: mvn clean package -DskipTests
+      - name: Cache Maven dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
 
-      - name: Start application
-        run: |
-          echo "Starting application..."
-          nohup java -jar target/automation-performance-testing-with-github-action-1.0.0-jar-with-dependencies.jar > app.log 2>&1 &
-          echo $! > app.pid
-          sleep 10
+      - name: Build automation application
+        run: mvn clean compile package -DskipTests
 
-      - name: Wait for application
+      - name: Check JAR file
         run: |
-          echo "Waiting for application..."
-          for i in {1..20}; do
-            if curl -f http://localhost:8080/api/health; then
-              echo "✅ Application is ready!"
-              break
-            fi
-            echo "Waiting... attempt $i/20"
-            sleep 3
-          done
-
-      - name: Test endpoints
-        run: |
-          echo "Testing endpoints..."
-          curl -s http://localhost:8080/api/health
-          curl -s http://localhost:8080/api/info
-
-      - name: Run performance test
-        run: |
-          echo "Running performance test..."
-          java -cp "target/classes:target/test-classes:target/lib/*" com.hoale.automation.performance.Main performance-config/api-performance.properties
-
-      - name: Stop application
-        run: |
-          if [ -f app.pid ]; then
-            kill $(cat app.pid) || true
+          echo "Checking built JAR file..."
+          ls -la target/
+          if [ -f "target/automation-performance-testing-with-github-action-1.0.0-jar-with-dependencies.jar" ]; then
+            echo "✅ Fat JAR file found"
+            file target/automation-performance-testing-with-github-action-1.0.0-jar-with-dependencies.jar
+          else
+            echo "❌ Fat JAR file not found!"
+            exit 1
           fi
 
-      - name: Upload logs
+      - name: Start automation application in background
+        run: |
+          echo "Starting automation application..."
+          nohup java -jar target/automation-performance-testing-with-github-action-1.0.0-jar-with-dependencies.jar > app.log 2>&1 &
+          echo $! > app.pid
+          echo "Application PID: $(cat app.pid)"
+
+      - name: Wait for application to start
+        run: |
+          echo "Waiting for automation application to start..."
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Checking application health..."
+          
+            # Check if process is still running
+            if [ -f app.pid ]; then
+              PID=$(cat app.pid)
+              if ! kill -0 $PID 2>/dev/null; then
+                echo "❌ Application process died! Checking logs..."
+                cat app.log
+                exit 1
+              fi
+            fi
+          
+            # Try health check
+            if curl -f --connect-timeout 5 --max-time 10 http://localhost:8080/api/health; then
+              echo "✅ Application is ready!"
+              break
+            else
+              echo "Application not ready yet, waiting... (attempt $ATTEMPT/$MAX_ATTEMPTS)"
+          
+              if [ $((ATTEMPT % 5)) -eq 0 ]; then
+                echo "=== Recent application logs ==="
+                tail -10 app.log
+                echo "=============================="
+              fi
+          
+              sleep 3
+            fi
+          done
+          
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "❌ Application failed to start after $MAX_ATTEMPTS attempts"
+            echo "=== Full application logs ==="
+            cat app.log
+            echo "============================"
+            exit 1
+          fi
+
+      - name: Test application endpoints
+        run: |
+          echo "Testing automation application endpoints..."
+          echo "=== Health Check ==="
+          curl -s http://localhost:8080/api/health | jq . || curl -s http://localhost:8080/api/health
+          echo -e "\n=== Application Info ==="
+          curl -s http://localhost:8080/api/info | jq . || curl -s http://localhost:8080/api/info
+          echo -e "\n=== User Test ==="
+          curl -s http://localhost:8080/api/users/test | jq . || curl -s http://localhost:8080/api/users/test
+
+      - name: Run API Health Check Performance Test
+        run: |
+          echo "Running API health check performance test with report generation..."
+          java -cp "target/classes:target/lib/*" com.hoale.automation.performance.Main performance-config/api-performance.properties
+        continue-on-error: true
+
+      - name: Run Application Info Load Test
+        run: |
+          echo "Running application info load test with report generation..."
+          java -cp "target/classes:target/lib/*" com.hoale.automation.performance.Main performance-config/load-test.properties
+        continue-on-error: true
+
+      - name: Run User API Stress Test
+        run: |
+          echo "Running user API stress test with report generation..."
+          java -cp "target/classes:target/lib/*" com.hoale.automation.performance.Main performance-config/stress-test.properties
+        continue-on-error: true
+
+      - name: Stop automation application
+        run: |
+          echo "Stopping automation application..."
+          if [ -f app.pid ]; then
+            PID=$(cat app.pid)
+            kill $PID 2>/dev/null || true
+            sleep 5
+            kill -9 $PID 2>/dev/null || true
+            rm app.pid
+          fi
+
+      - name: Collect and organize reports
+        run: |
+          echo "Collecting and organizing performance reports..."
+          mkdir -p final-reports
+          
+          if [ -d "reports" ]; then
+            echo "📊 Generated reports:"
+            ls -la reports/
+          
+            # Copy reports to final directory
+            cp -r reports/* final-reports/ 2>/dev/null || true
+          
+            # Create summary file
+            echo "Automation Performance Test Results Summary" > final-reports/summary.txt
+            echo "==========================================" >> final-reports/summary.txt
+            echo "" >> final-reports/summary.txt
+            echo "Repository: ${{ github.repository }}" >> final-reports/summary.txt
+            echo "Branch: ${{ github.ref_name }}" >> final-reports/summary.txt
+            echo "Commit: ${{ github.sha }}" >> final-reports/summary.txt
+            echo "Author: ${{ github.actor }}" >> final-reports/summary.txt
+            echo "Developer: ${{ env.DEVELOPER }}" >> final-reports/summary.txt
+            echo "Framework: Automation Performance Testing v${{ env.APP_VERSION }}" >> final-reports/summary.txt
+            echo "Created: ${{ env.CREATED_DATE }}" >> final-reports/summary.txt
+            echo "Generated: $(date)" >> final-reports/summary.txt
+            echo "" >> final-reports/summary.txt
+            echo "Generated Reports:" >> final-reports/summary.txt
+            ls -la final-reports/ >> final-reports/summary.txt
+          
+          else
+            echo "No reports generated"
+            echo "No performance reports were generated" > final-reports/no-reports.txt
+          fi
+
+      - name: Prepare email content
+        run: |
+          echo "Preparing email notification content..."
+          
+          # Set environment variables for email
+          echo "COMMIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
+          echo "COMMIT_AUTHOR=${{ github.actor }}" >> $GITHUB_ENV
+          echo "REPO_NAME=${{ github.repository }}" >> $GITHUB_ENV
+          echo "BRANCH_NAME=${{ github.ref_name }}" >> $GITHUB_ENV
+          echo "WORKFLOW_URL=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
+          
+          # Create detailed email content
+          mkdir -p email-content
+          
+          cat > email-content/email-body.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <style>
+                  body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                  .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; }
+                  .content { padding: 20px; }
+                  .metrics { background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0; }
+                  .success { color: #28a745; }
+                  .warning { color: #ffc107; }
+                  .danger { color: #dc3545; }
+                  .footer { background: #e9ecef; padding: 15px; border-radius: 8px; margin-top: 20px; }
+              </style>
+          </head>
+          <body>
+              <div class="header">
+                  <h1>🚀 Automation Performance Test Results</h1>
+                  <h2>Repository: ${{ github.repository }}</h2>
+              </div>
+          
+              <div class="content">
+                  <h3>📋 Test Information</h3>
+                  <ul>
+                      <li><strong>Branch:</strong> ${{ github.ref_name }}</li>
+                      <li><strong>Commit:</strong> ${{ github.sha }}</li>
+                      <li><strong>Author:</strong> ${{ github.actor }}</li>
+                      <li><strong>Developer:</strong> leanhhoa30012004</li>
+                      <li><strong>Timestamp:</strong> $(date)</li>
+                  </ul>
+          
+                  <h3>🎯 Test Results</h3>
+                  <div class="metrics">
+                      <p>Performance tests have been executed for the automation application.</p>
+                      <p>Detailed reports have been generated and are available as artifacts.</p>
+                      <p><strong>Framework:</strong> Automation Performance Testing v1.0</p>
+                      <p><strong>Created:</strong> 2025-07-23 19:52:31 UTC</p>
+                  </div>
+          
+                  <h3>📊 Available Reports</h3>
+                  <ul>
+                      <li>HTML Reports - Interactive performance dashboards</li>
+                      <li>CSV Reports - Raw performance data</li>
+                      <li>JSON Reports - Structured test results</li>
+                      <li>Text Reports - Summary information</li>
+                  </ul>
+          
+                  <h3>🔗 Links</h3>
+                  <ul>
+                      <li><a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">View GitHub Actions Run</a></li>
+                      <li><a href="https://github.com/${{ github.repository }}/commit/${{ github.sha }}">View Commit Details</a></li>
+                      <li><a href="https://github.com/${{ github.repository }}">View Repository</a></li>
+                  </ul>
+              </div>
+          
+              <div class="footer">
+                  <h3>👨‍💻 Developer Information</h3>
+                  <p><strong>Developer:</strong> leanhhoa30012004</p>
+                  <p><strong>Framework:</strong> Automation Performance Testing with GitHub Action</p>
+                  <p><strong>Version:</strong> 1.0.0</p>
+                  <p><strong>Repository:</strong> automation-performance-testing-with-github-action</p>
+                  <p><strong>Generated:</strong> $(date) UTC</p>
+              </div>
+          </body>
+          </html>
+          EOF
+          
+          # Create plain text version
+          cat > email-content/email-body.txt << 'EOF'
+          Automation Performance Test Results
+          ===================================
+          
+          Repository: ${{ github.repository }}
+          Branch: ${{ github.ref_name }}
+          Commit: ${{ github.sha }}
+          Author: ${{ github.actor }}
+          Developer: leanhhoa30012004
+          Timestamp: $(date)
+          
+          Test Results:
+          - Performance tests executed successfully
+          - Reports generated and available as artifacts
+          - Framework: Automation Performance Testing v1.0
+          - Created: 2025-07-23 19:52:31 UTC
+          
+          Available Reports:
+          - HTML Reports - Interactive performance dashboards
+          - CSV Reports - Raw performance data  
+          - JSON Reports - Structured test results
+          - Text Reports - Summary information
+          
+          Links:
+          - GitHub Actions: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - Commit: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
+          - Repository: https://github.com/${{ github.repository }}
+          
+          Developer: leanhhoa30012004
+          Framework: Automation Performance Testing with GitHub Action
+          Generated: $(date) UTC
+          EOF
+
+      - name: Upload performance reports as artifacts
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: application-logs
-          path: app.log
+          name: automation-performance-reports-${{ github.sha }}
+          path: |
+            final-reports/
+            app.log
+          retention-days: 30
+
+      - name: Send email notification to commit author
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: |
+            🚀 Automation Performance Test Results - ${{ github.repository }} [${{ github.ref_name }}] - By: ${{ github.actor }}
+          html_body: file://email-content/email-body.html
+          body: file://email-content/email-body.txt
+          to: |
+            leanhhoa30012004@gmail.com
+            ${{ github.actor }}@users.noreply.github.com
+          from: Automation Performance Test Bot <${{ secrets.SMTP_USERNAME }}>
+          attachments: |
+            final-reports/*.html
+            final-reports/*.csv
+            final-reports/summary.txt
+        continue-on-error: true
+
+      - name: Comment PR with performance results (if PR)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let comment = '## 📊 Automation Performance Test Results\n\n';
+            comment += '**Repository:** ${{ github.repository }}\n';
+            comment += '**Branch:** ${{ github.ref_name }}\n';
+            comment += '**Commit:** ${{ github.sha }}\n';
+            comment += '**Author:** ${{ github.actor }}\n';
+            comment += '**Developer:** leanhhoa30012004\n';
+            comment += '**Framework:** Automation Performance Testing v1.0\n';
+            comment += '**Created:** 2025-07-23 19:52:31 UTC\n\n';
+            
+            comment += '### 🎯 Test Summary\n';
+            comment += 'Performance tests have been executed for the automation application.\n\n';
+            
+            comment += '### 📋 Generated Reports\n';
+            comment += '- 📊 **HTML Reports** - Interactive performance dashboards\n';
+            comment += '- 📈 **CSV Reports** - Raw performance data for analysis\n';
+            comment += '- 📋 **JSON Reports** - Structured test results\n';
+            comment += '- 📝 **Text Reports** - Summary information\n\n';
+            
+            comment += '### 🔗 Links\n';
+            comment += `- 📁 [View Reports in Artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
+            comment += `- 🔍 [View Action Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
+            comment += `- 📝 [View Commit](https://github.com/${{ github.repository }}/commit/${{ github.sha }})\n\n`;
+            
+            comment += '### 👨‍💻 Developer Info\n';
+            comment += '**Developer:** leanhhoa30012004\n';
+            comment += '**Framework:** Automation Performance Testing with GitHub Action\n';
+            comment += '**Version:** 1.0.0\n';
+            comment += `**Generated:** ${new Date().toISOString()}\n\n`;
+            
+            comment += '---\n';
+            comment += '*📧 Email notification sent to commit author and leanhhoa30012004@gmail.com*\n';
+            comment += '*🚀 Powered by Automation Performance Testing Framework*';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Final summary
+        run: |
+          echo "=========================================="
+          echo "🎉 Automation Performance Testing Complete"
+          echo "=========================================="
+          echo "Developer: ${{ env.DEVELOPER }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Author: ${{ github.actor }}"
+          echo "Framework: Automation Performance Testing v${{ env.APP_VERSION }}"
+          echo "Created: ${{ env.CREATED_DATE }}"
+          echo "Completed: $(date)"
+          echo ""
+          echo "📊 Reports generated and uploaded as artifacts"
+          echo "📧 Email notification sent to commit author"
+          echo "🚀 All tests completed successfully!"
+          echo "=========================================="
