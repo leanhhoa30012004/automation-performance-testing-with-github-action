@@ -55,7 +55,7 @@ jobs:
       - name: Run performance test
         run: |
           echo "Running performance test..."
-          java -cp "target/classes:target/lib/*" com.hoale.automation.performance.Main performance-config/api-performance.properties
+          java -cp "target/classes:target/test-classes:target/lib/*" com.hoale.automation.performance.Main performance-config/api-performance.properties
 
       - name: Stop application
         run: |
