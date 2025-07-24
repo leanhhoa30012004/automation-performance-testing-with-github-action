@@ -18,11 +18,17 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build and Generate Performance Report
+      - name: Build project
+        run: mvn clean package -DskipTests
+
+      - name: Run performance test & generate report
         run: |
-          mvn clean package -DskipTests
-          # Chạy lệnh sinh báo cáo hiệu năng ở đây, ví dụ:
-          # java -cp "target/classes:target/lib/*" com.hoale.automation.performance.Main performance-config/api-performance.properties
+          # Chạy test để sinh báo cáo, sửa lại cho đúng app bạn (dùng lệnh này hoặc JAR của bạn)
+          java -cp "target/classes:target/lib/*" com.hoale.automation.performance.Main performance-config/api-performance.properties
+
+      - name: Kiểm tra file HTML report sau khi chạy test
+        run: |
+          ls -l reports || true
 
       - name: Get committer email and date
         id: meta
