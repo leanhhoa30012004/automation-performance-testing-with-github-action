@@ -78,39 +78,25 @@ jobs:
           echo "PDF_FILE=$PDF_FILE" >> $GITHUB_ENV
 
 
-      - name: Send PDF report to committer
-        uses: dawidd6/action-send-mail@v6
+      - name: Send HTML report via SendGrid
+        uses: Ilshidur/action-sendgrid@master
         with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          secure: true
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "[PerfTest] Báo cáo hiệu năng ${{ github.repository }} (${{ github.sha }})"
+          sendgrid_api_key: ${{ secrets.SENDGRID_API_KEY }}
           to: ${{ env.COMMIT_EMAIL }},${{ secrets.EMAIL_OWNER }}
           from: PerfBot <${{ secrets.EMAIL_USERNAME }}>
-          content_type: text/html
-          body: |
-            <html>
-              <body>
-                <p>Xin chào <b>${{ env.COMMIT_AUTHOR }}</b>,</p>
-
-                <p>Báo cáo hiệu năng CI/CD cho commit này đã hoàn tất.</p>
-
-                <ul>
-                  <li><b>Repo:</b> ${{ github.repository }}</li>
-                  <li><b>Branch:</b> ${{ github.ref_name }}</li>
-                  <li><b>Commit:</b> ${{ github.sha }}</li>
-                  <li><b>Ngày:</b> ${{ env.COMMIT_DATE }}</li>
-                </ul>
-
-                <p>Vui lòng xem báo cáo chi tiết trong file PDF đính kèm.</p>
-
-                <p style="color:gray;font-size:smaller;">--<br>Automation Performance Framework by leanhhoa30012004</p>
-              </body>
-            </html>
+          subject: "[PerfTest] Performance Report for ${{ github.repository }} (${{ github.sha }})"
+          content: |
+            <p>Hello <b>${{ env.COMMIT_AUTHOR }}</b>,</p>
+            <p>The automated performance test for your recent commit has finished.<br>
+            Please find the attached PDF report for detailed results.</p>
+            <ul>
+              <li><b>Repo:</b> ${{ github.repository }}</li>
+              <li><b>Branch:</b> ${{ github.ref_name }}</li>
+              <li><b>Commit:</b> ${{ github.sha }}</li>
+              <li><b>Date:</b> ${{ env.COMMIT_DATE }}</li>
+            </ul>
+            <p style="color:gray;font-size:smaller;">--<br>Automation Performance Framework by leanhhoa30012004</p>
           attachments: ${{ env.PDF_FILE }}
-
       - name: Fail job if Maven fail
         if: failure()
         run: exit 1
