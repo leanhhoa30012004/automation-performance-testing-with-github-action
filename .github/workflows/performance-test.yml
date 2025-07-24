@@ -77,6 +77,7 @@ jobs:
           wkhtmltopdf --enable-local-file-access "$REPORT_FILE" "$PDF_FILE"
           echo "PDF_FILE=$PDF_FILE" >> $GITHUB_ENV
 
+
       - name: Send PDF report to committer
         uses: dawidd6/action-send-mail@v3
         with:
