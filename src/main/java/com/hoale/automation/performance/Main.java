@@ -1,5 +1,4 @@
 package com.hoale.automation.performance;
-
 /**
  * Performance Test Main Entry Point
  *
