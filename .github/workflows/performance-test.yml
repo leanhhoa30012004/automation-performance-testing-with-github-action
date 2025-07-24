@@ -18,7 +18,7 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build project (fat jar)
+      - name: Build project (tạo fat jar)
         run: mvn clean package
 
       - name: Start API server in background
@@ -26,7 +26,7 @@ jobs:
           nohup java -jar target/automation-performance-testing-with-github-action-1.0.0-jar-with-dependencies.jar > app.log 2>&1 &
           echo $! > app.pid
 
-      - name: Wait for API server to be ready
+      - name: Wait for server to be ready
         run: |
           for i in {1..20}; do
             if curl -sSf http://localhost:8080/api/health; then
@@ -39,7 +39,7 @@ jobs:
           cat app.log
           exit 1
 
-      - name: Run performance test and generate report
+      - name: Run performance test & generate report
         run: |
           java -cp target/automation-performance-testing-with-github-action-1.0.0-jar-with-dependencies.jar com.hoale.automation.performance.Main performance-config/api-performance.properties
 
@@ -47,7 +47,7 @@ jobs:
         run: |
           kill $(cat app.pid) || true
 
-      - name: List HTML report files
+      - name: Kiểm tra file HTML report sau khi chạy test
         run: |
           ls -l reports || true
 
@@ -68,14 +68,15 @@ jobs:
           mkdir -p pdf-report
           REPORT_FILE=$(ls -1t reports/*.html | head -1)
           if [ -z "$REPORT_FILE" ]; then
-            echo "❌ Could not find any HTML report file in reports/ directory!"
+            echo "❌ Không tìm thấy file HTML báo cáo trong thư mục reports/!"
             ls -l reports || true
             exit 1
           fi
-          echo "Using report file: $REPORT_FILE"
+          echo "Dùng file báo cáo: $REPORT_FILE"
           PDF_FILE=pdf-report/perf-report-${{ env.COMMIT_DATE }}.pdf
           wkhtmltopdf --enable-local-file-access "$REPORT_FILE" "$PDF_FILE"
           echo "PDF_FILE=$PDF_FILE" >> $GITHUB_ENV
+
 
       - name: Send PDF report via email
         uses: dawidd6/action-send-mail@v3
@@ -90,8 +91,6 @@ jobs:
           from: PerfBot <${{ secrets.EMAIL_USERNAME }}>
           content_type: text/html
           body: |
-            <!DOCTYPE html>
-            <html>
             <body style="font-family:Segoe UI,Arial,sans-serif;font-size:16px;color:#222;">
               <p>Hello <b>${{ env.COMMIT_AUTHOR }}</b>,</p>
               <p>
@@ -124,8 +123,8 @@ jobs:
                 &mdash; <i>Automation Performance Framework by leanhhoa30012004</i>
               </p>
             </body>
-            </html>
           attachments: ${{ env.PDF_FILE }}
-      - name: Fail job if previous steps failed
+
+      - name: Fail job if Maven fail
         if: failure()
         run: exit 1
