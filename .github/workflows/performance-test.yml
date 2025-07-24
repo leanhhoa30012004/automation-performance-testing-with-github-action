@@ -21,9 +21,8 @@ jobs:
       - name: Build and Generate Performance Report
         run: |
           mvn clean package -DskipTests
-          # Nếu app bạn cần lệnh riêng để chạy test sinh báo cáo, thêm vào đây
-          # Ví dụ: java -jar target/your-app.jar ... 
-          # Đảm bảo sau khi chạy xong có file reports/report.html
+          # Chạy lệnh sinh báo cáo hiệu năng ở đây, ví dụ:
+          # java -cp "target/classes:target/lib/*" com.hoale.automation.performance.Main performance-config/api-performance.properties
 
       - name: Get committer email and date
         id: meta
@@ -37,15 +36,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y wkhtmltopdf
 
-      - name: Convert HTML report to PDF
+      - name: Convert latest HTML report to PDF
         run: |
           mkdir -p pdf-report
-          if [ ! -f reports/report.html ]; then
-            echo "❌ Không tìm thấy file báo cáo reports/report.html!"
+          REPORT_FILE=$(ls -1t reports/*.html | head -1)
+          if [ -z "$REPORT_FILE" ]; then
+            echo "❌ Không tìm thấy file HTML báo cáo trong thư mục reports/!"
             ls -l reports || true
             exit 1
           fi
-          wkhtmltopdf --enable-local-file-access reports/report.html pdf-report/perf-report-${{ env.COMMIT_DATE }}.pdf
+          echo "Dùng file báo cáo: $REPORT_FILE"
+          PDF_FILE=pdf-report/perf-report-${{ env.COMMIT_DATE }}.pdf
+          wkhtmltopdf --enable-local-file-access "$REPORT_FILE" "$PDF_FILE"
+          echo "PDF_FILE=$PDF_FILE" >> $GITHUB_ENV
 
       - name: Send PDF report to committer
         uses: dawidd6/action-send-mail@v3
@@ -73,7 +76,7 @@ jobs:
 
             -- 
             Automation Performance Framework by leanhhoa30012004
-          attachments: pdf-report/perf-report-${{ env.COMMIT_DATE }}.pdf
+          attachments: ${{ env.PDF_FILE }}
 
       - name: Fail job if Maven fail
         if: failure()
