@@ -21,10 +21,31 @@ jobs:
       - name: Build project (tạo fat jar)
         run: mvn clean package -DskipTests
 
+      - name: Start API server in background
+        run: |
+          nohup java -cp "target/classes" com.hoale.automation.Application > app.log 2>&1 &
+          echo $! > app.pid
+
+      - name: Wait for server to be ready
+        run: |
+          for i in {1..20}; do
+            if curl -sSf http://localhost:8080/api/health; then
+              echo "Server is up!"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Server failed to start."
+          cat app.log
+          exit 1
+
       - name: Run performance test & generate report
         run: |
-          # Sửa lại đúng tên JAR của bạn!
-          java -jar target/automation-performance-testing-with-github-action-1.0.0-jar-with-dependencies.jar performance-config/api-performance.properties
+          java -cp "target/classes" com.hoale.automation.performance.Main performance-config/api-performance.properties
+
+      - name: Stop API server
+        run: |
+          kill $(cat app.pid) || true
 
       - name: Kiểm tra file HTML report sau khi chạy test
         run: |
