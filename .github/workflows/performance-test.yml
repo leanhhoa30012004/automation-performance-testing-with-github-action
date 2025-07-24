@@ -78,21 +78,33 @@ jobs:
           echo "PDF_FILE=$PDF_FILE" >> $GITHUB_ENV
 
 
-      - name: Send PDF report via email
-        uses: dawidd6/action-send-mail@v3
+      - name: Send HTML report via email
+        uses: mirromutth/html-send-email-action@v1
         with:
           server_address: smtp.gmail.com
           server_port: 465
-          secure: true
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           subject: "[PerfTest] Performance Report for ${{ github.repository }} (${{ github.sha }})"
           to: ${{ env.COMMIT_EMAIL }},${{ secrets.EMAIL_OWNER }}
           from: PerfBot <${{ secrets.EMAIL_USERNAME }}>
+          body: |
+            <p>Hello <b>${{ env.COMMIT_AUTHOR }}</b>,</p>
+            <p>The automated performance test for your recent commit has finished.<br>
+            Please find the attached PDF report for detailed results.</p>
+            <table style="background:#f7f9fa;padding:12px 20px;border-radius:8px;border:1px solid #e2e2e2;margin:16px 0;">
+              <tr><td><b>Repository:</b></td><td>${{ github.repository }}</td></tr>
+              <tr><td><b>Branch:</b></td><td>${{ github.ref_name }}</td></tr>
+              <tr><td><b>Commit:</b></td><td><code>${{ github.sha }}</code></td></tr>
+              <tr><td><b>Date:</b></td><td>${{ env.COMMIT_DATE }}</td></tr>
+            </table>
+            <p><b>Note:</b> This is an automated message from the CI/CD pipeline.<br>
+            For any questions, please contact the repository maintainer.</p>
+            <p style="color:#888;font-size:13px;margin-top:32px;">
+              &mdash; <i>Automation Performance Framework by leanhhoa30012004</i>
+            </p>
           content_type: text/html
-          body: "<p>Hello <b>${{ env.COMMIT_AUTHOR }}</b>,</p><p>The automated performance test for your recent commit has finished.<br>Please find the attached PDF report for detailed results.</p><table style='background:#f7f9fa;padding:12px 20px;border-radius:8px;border:1px solid #e2e2e2;margin:16px 0;'><tr><td><b>Repository:</b></td><td>${{ github.repository }}</td></tr><tr><td><b>Branch:</b></td><td>${{ github.ref_name }}</td></tr><tr><td><b>Commit:</b></td><td><code>${{ github.sha }}</code></td></tr><tr><td><b>Date:</b></td><td>${{ env.COMMIT_DATE }}</td></tr></table><p><b>Note:</b> This is an automated message from the CI/CD pipeline.<br>For any questions, please contact the repository maintainer.</p><p style='color:#888;font-size:13px;margin-top:32px;'>&mdash; <i>Automation Performance Framework by leanhhoa30012004</i></p>"
           attachments: ${{ env.PDF_FILE }}
-
       - name: Fail job if Maven fail
         if: failure()
         run: exit 1
