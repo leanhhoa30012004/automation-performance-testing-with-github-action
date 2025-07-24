@@ -1,4 +1,4 @@
-name: Automation Performance Test & Mail Report
+name: Automation Performance Testing & Send Mail
 
 on:
   push:
@@ -18,12 +18,12 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build and Generate Report
+      - name: Build and Generate Performance Report
         run: |
           mvn clean package -DskipTests
-          # Gọi lệnh chạy test/performance và sinh báo cáo HTML, ví dụ:
-          # java -jar target/your-perf-app.jar ... (tùy app của bạn)
-          # Giả sử báo cáo được sinh ra ở reports/report.html
+          # Nếu app bạn cần lệnh riêng để chạy test sinh báo cáo, thêm vào đây
+          # Ví dụ: java -jar target/your-app.jar ... 
+          # Đảm bảo sau khi chạy xong có file reports/report.html
 
       - name: Get committer email and date
         id: meta
@@ -40,6 +40,11 @@ jobs:
       - name: Convert HTML report to PDF
         run: |
           mkdir -p pdf-report
+          if [ ! -f reports/report.html ]; then
+            echo "❌ Không tìm thấy file báo cáo reports/report.html!"
+            ls -l reports || true
+            exit 1
+          fi
           wkhtmltopdf --enable-local-file-access reports/report.html pdf-report/perf-report-${{ env.COMMIT_DATE }}.pdf
 
       - name: Send PDF report to committer
