@@ -1,5 +1,6 @@
 package com.hoale.automation.performance.config;
 
+import com.hoale.automation.performance.model.TestConfig;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Properties;
@@ -68,4 +69,17 @@ public class PerformanceConfig {
     public String getTestAuthor() { return testAuthor; }
     public String getFramework() { return framework; }
     public String getCreatedDate() { return createdDate; }
+
+    // Chuyển đổi sang TestConfig
+    public TestConfig toTestConfig() {
+        return new TestConfig(
+                this.targetUrl,
+                this.threadCount,
+                this.requestsPerThread,
+                this.httpMethod,
+                this.testDuration,
+                this.connectionTimeout,
+                this.responseTimeout
+        );
+    }
 }
