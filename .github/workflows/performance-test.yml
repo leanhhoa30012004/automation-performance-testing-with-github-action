@@ -78,21 +78,57 @@ jobs:
           echo "PDF_FILE=$PDF_FILE" >> $GITHUB_ENV
 
 
-      - name: Send PDF report to committer
-        uses: dawidd6/action-send-mail@v6
-        with:
-          server_address: smtp.gmail.com
-          server_port: 465
-          secure: true
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "[PerfTest] Báo cáo hiệu năng ${{ github.repository }} (${{ github.sha }})"
-          to: ${{ env.COMMIT_EMAIL }},${{ secrets.EMAIL_OWNER }}
-          from: PerfBot <${{ secrets.EMAIL_USERNAME }}>
-          content_type: text/html
-          body: "<p>Hello <b>${{ env.COMMIT_AUTHOR }}</b>,</p><p>The automated performance test for your recent commit has finished.<br>Please find the attached PDF report for detailed results.</p><ul><li><b>Repo:</b> ${{ github.repository }}</li><li><b>Branch:</b> ${{ github.ref_name }}</li><li><b>Commit:</b> ${{ github.sha }}</li><li><b>Date:</b> ${{ env.COMMIT_DATE }}</li></ul><p>For details, see the attached PDF report.</p><p style='color:gray;font-size:smaller;'>--<br>Automation Performance Framework by leanhhoa30012004</p>"
-          attachments: ${{ env.PDF_FILE }}
+      - name: Send HTML report via Gmail using Python
+        env:
+          GMAIL_USER: ${{ secrets.EMAIL_USERNAME }}
+          GMAIL_PASS: ${{ secrets.EMAIL_PASSWORD }}
+          TO_EMAIL: ${{ env.COMMIT_EMAIL }},${{ secrets.EMAIL_OWNER }}
+          PDF_FILE: ${{ env.PDF_FILE }}
+          AUTHOR: ${{ env.COMMIT_AUTHOR }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          DATE: ${{ env.COMMIT_DATE }}
+        run: |
+          python3 <<EOF
+          import smtplib
+          from email.mime.multipart import MIMEMultipart
+          from email.mime.text import MIMEText
+          from email.mime.base import MIMEBase
+          from email import encoders
+          import os
 
+          msg = MIMEMultipart()
+          msg['From'] = os.environ['GMAIL_USER']
+          msg['To'] = os.environ['TO_EMAIL']
+          msg['Subject'] = f"[PerfTest] Performance Report for {os.environ['REPO']} ({os.environ['SHA']})"
+
+          html = f'''
+          <p>Hello <b>{os.environ['AUTHOR']}</b>,</p>
+          <p>The automated performance test for your recent commit has finished.<br>
+          Please find the attached PDF report for detailed results.</p>
+          <ul>
+            <li><b>Repo:</b> {os.environ['REPO']}</li>
+            <li><b>Branch:</b> {os.environ['BRANCH']}</li>
+            <li><b>Commit:</b> {os.environ['SHA']}</li>
+            <li><b>Date:</b> {os.environ['DATE']}</li>
+          </ul>
+          <p style="color:gray;font-size:smaller;">--<br>Automation Performance Framework by leanhhoa30012004</p>
+          '''
+          msg.attach(MIMEText(html, 'html'))
+
+          filename = os.environ['PDF_FILE']
+          with open(filename, "rb") as f:
+              part = MIMEBase('application', 'octet-stream')
+              part.set_payload(f.read())
+              encoders.encode_base64(part)
+              part.add_header('Content-Disposition', f'attachment; filename={os.path.basename(filename)}')
+              msg.attach(part)
+
+          with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+              server.login(os.environ['GMAIL_USER'], os.environ['GMAIL_PASS'])
+              server.sendmail(msg['From'], msg['To'].split(','), msg.as_string())
+          EOF
       - name: Fail job if Maven fail
         if: failure()
         run: exit 1
