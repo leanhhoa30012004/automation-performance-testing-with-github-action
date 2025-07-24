@@ -79,7 +79,7 @@ jobs:
 
 
       - name: Send HTML report via email
-        uses: mirromutth/html-send-email-action@v1
+        uses: mirromutth/send-email-action@v1
         with:
           server_address: smtp.gmail.com
           server_port: 465
@@ -88,6 +88,7 @@ jobs:
           subject: "[PerfTest] Performance Report for ${{ github.repository }} (${{ github.sha }})"
           to: ${{ env.COMMIT_EMAIL }},${{ secrets.EMAIL_OWNER }}
           from: PerfBot <${{ secrets.EMAIL_USERNAME }}>
+          content_type: text/html
           body: |
             <p>Hello <b>${{ env.COMMIT_AUTHOR }}</b>,</p>
             <p>The automated performance test for your recent commit has finished.<br>
@@ -103,7 +104,6 @@ jobs:
             <p style="color:#888;font-size:13px;margin-top:32px;">
               &mdash; <i>Automation Performance Framework by leanhhoa30012004</i>
             </p>
-          content_type: text/html
           attachments: ${{ env.PDF_FILE }}
       - name: Fail job if Maven fail
         if: failure()
