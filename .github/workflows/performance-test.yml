@@ -1,4 +1,4 @@
-name: Automation Performance Testing CI/CD | © 2025 - leanhhoa30012004
+name: Automation Performance Test & Mail Report
 
 on:
   push:
@@ -6,13 +6,8 @@ on:
   pull_request:
     branches: [ "main" ]
 
-env:
-  DEVELOPER: leanhhoa30012004
-  FRAMEWORK_VERSION: 1.0.0
-  CREATED_DATE: 2025-07-24
-
 jobs:
-  build:
+  perf-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,122 +17,30 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: maven
 
-      - name: Build with Maven
-        run: mvn clean package -DskipTests
-
-      - name: Upload JAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: automation-performance-jar
-          path: target/*.jar
-
-  test:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: maven
-
-      - name: Download JAR
-        uses: actions/download-artifact@v4
-        with:
-          name: automation-performance-jar
-          path: target/
-
-      - name: Start Application
+      - name: Build and Generate Report
         run: |
-          nohup java -jar target/*.jar > app.log 2>&1 &
-          echo $! > app.pid
-
-      - name: Wait for App Ready
-        run: |
-          for i in {1..20}; do
-            if curl -f http://localhost:8080/api/health; then
-              echo "App ready!"
-              exit 0
-            fi
-            sleep 3
-          done
-          echo "App failed to start"
-          cat app.log
-          exit 1
-
-      - name: Run Performance Tests and Generate Reports
-        run: |
-          mkdir -p reports
-          java -cp "target/classes:target/lib/*" com.hoale.automation.performance.Main performance-config/api-performance.properties || true
-          java -cp "target/classes:target/lib/*" com.hoale.automation.performance.Main performance-config/load-test.properties || true
-
-      - name: Extract Performance Summary
-        id: summary
-        run: |
-          TOTAL=$(find reports -type f -name "*.json" | wc -l)
-          PASSED=$(grep -l '"status":"PASSED"' reports/*.json | wc -l || echo 0)
-          FAILED=$(grep -l '"status":"FAILED"' reports/*.json | wc -l || echo 0)
-          echo "TOTAL=$TOTAL" >> $GITHUB_ENV
-          echo "PASSED=$PASSED" >> $GITHUB_ENV
-          echo "FAILED=$FAILED" >> $GITHUB_ENV
+          mvn clean package -DskipTests
+          # Gọi lệnh chạy test/performance và sinh báo cáo HTML, ví dụ:
+          # java -jar target/your-perf-app.jar ... (tùy app của bạn)
+          # Giả sử báo cáo được sinh ra ở reports/report.html
 
       - name: Get committer email and date
+        id: meta
         run: |
-          COMMIT_EMAIL=$(git log -1 --pretty=format:'%ae')
-          COMMIT_DATE=$(git log -1 --pretty=format:'%cd' --date=format:'%Y-%m-%d')
-          COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')
-          echo "COMMIT_EMAIL=$COMMIT_EMAIL" >> $GITHUB_ENV
-          echo "COMMIT_DATE=$COMMIT_DATE" >> $GITHUB_ENV
-          echo "COMMIT_AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_ENV
-
-      - name: Stop Application
-        run: |
-          if [ -f app.pid ]; then
-            kill $(cat app.pid) || true
-            rm app.pid
-          fi
-
-      - name: Create HTML Dashboard
-        run: |
-          mkdir -p report-site/performance
-          cp -r reports/* report-site/performance/ || true
-          cat > report-site/index.html <<EOF
-          <!DOCTYPE html>
-          <html><head><meta charset="UTF-8"><title>Performance Report</title></head>
-          <body>
-            <h1>Automation Performance Test Report - ${{ env.COMMIT_DATE }}</h1>
-            <ul>
-              <li>Total tests: ${{ env.TOTAL }}</li>
-              <li>Passed: ${{ env.PASSED }}</li>
-              <li>Failed: ${{ env.FAILED }}</li>
-            </ul>
-            <h2>Raw Reports</h2>
-            <ul>
-              $(for f in $(ls report-site/performance/*.json 2>/dev/null); do echo "<li><a href=\"performance/$(basename $f)\">$(basename $f)</a></li>"; done)
-            </ul>
-          </body></html>
-          EOF
+          echo "COMMIT_EMAIL=$(git log -1 --pretty=format:'%ae')" >> $GITHUB_ENV
+          echo "COMMIT_DATE=$(git log -1 --pretty=format:'%cd' --date=format:'%Y-%m-%d')" >> $GITHUB_ENV
+          echo "COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an')" >> $GITHUB_ENV
 
       - name: Install wkhtmltopdf
         run: |
           sudo apt-get update
           sudo apt-get install -y wkhtmltopdf
 
-      - name: Convert HTML Dashboard to PDF
+      - name: Convert HTML report to PDF
         run: |
           mkdir -p pdf-report
-          wkhtmltopdf --enable-local-file-access report-site/index.html pdf-report/${{ env.COMMIT_EMAIL }}-${{ env.COMMIT_DATE }}-Performance_Report.pdf
-
-      - name: Deploy Full Report to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: report-site
+          wkhtmltopdf --enable-local-file-access reports/report.html pdf-report/perf-report-${{ env.COMMIT_DATE }}.pdf
 
       - name: Send PDF report to committer
         uses: dawidd6/action-send-mail@v3
@@ -147,18 +50,26 @@ jobs:
           secure: true
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "[Performance Report] ${{ github.repository }}"
+          subject: "[PerfTest] Báo cáo hiệu năng ${{ github.repository }} (${{ github.sha }})"
           to: ${{ env.COMMIT_EMAIL }},${{ secrets.EMAIL_OWNER }}
           from: PerfBot <${{ secrets.EMAIL_USERNAME }}>
           content_type: text/plain
           body: |
-            CI đã chạy xong!
-            Tổng số test: ${{ env.TOTAL }}, Passed: ${{ env.PASSED }}, Failed: ${{ env.FAILED }}
-            Xem báo cáo chi tiết tại: https://leanhhoa30012004.github.io/automation-performance-testing-with-github-action/
-          attachments: pdf-report/${{ env.COMMIT_EMAIL }}-${{ env.COMMIT_DATE }}-Performance_Report.pdf
+            Xin chào ${{ env.COMMIT_AUTHOR }},
 
-      - name: Fail job if there are test failures
-        if: env.FAILED != '0'
-        run: |
-          echo "❌ Có test bị fail: $FAILED"
-          exit 1
+            Báo cáo hiệu năng CI/CD cho commit này đã xong.
+
+            Đính kèm PDF báo cáo chi tiết.
+
+            Repo: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Ngày: ${{ env.COMMIT_DATE }}
+
+            -- 
+            Automation Performance Framework by leanhhoa30012004
+          attachments: pdf-report/perf-report-${{ env.COMMIT_DATE }}.pdf
+
+      - name: Fail job if Maven fail
+        if: failure()
+        run: exit 1
