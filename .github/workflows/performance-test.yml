@@ -18,7 +18,7 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Build project (tạo fat jar)
+      - name: Build project (fat jar)
         run: mvn clean package
 
       - name: Start API server in background
@@ -26,7 +26,7 @@ jobs:
           nohup java -jar target/automation-performance-testing-with-github-action-1.0.0-jar-with-dependencies.jar > app.log 2>&1 &
           echo $! > app.pid
 
-      - name: Wait for server to be ready
+      - name: Wait for API server to be ready
         run: |
           for i in {1..20}; do
             if curl -sSf http://localhost:8080/api/health; then
@@ -39,7 +39,7 @@ jobs:
           cat app.log
           exit 1
 
-      - name: Run performance test & generate report
+      - name: Run performance test and generate report
         run: |
           java -cp target/automation-performance-testing-with-github-action-1.0.0-jar-with-dependencies.jar com.hoale.automation.performance.Main performance-config/api-performance.properties
 
@@ -47,7 +47,7 @@ jobs:
         run: |
           kill $(cat app.pid) || true
 
-      - name: Kiểm tra file HTML report sau khi chạy test
+      - name: List HTML report files
         run: |
           ls -l reports || true
 
@@ -68,17 +68,16 @@ jobs:
           mkdir -p pdf-report
           REPORT_FILE=$(ls -1t reports/*.html | head -1)
           if [ -z "$REPORT_FILE" ]; then
-            echo "❌ Không tìm thấy file HTML báo cáo trong thư mục reports/!"
+            echo "❌ Could not find any HTML report file in reports/ directory!"
             ls -l reports || true
             exit 1
           fi
-          echo "Dùng file báo cáo: $REPORT_FILE"
+          echo "Using report file: $REPORT_FILE"
           PDF_FILE=pdf-report/perf-report-${{ env.COMMIT_DATE }}.pdf
           wkhtmltopdf --enable-local-file-access "$REPORT_FILE" "$PDF_FILE"
           echo "PDF_FILE=$PDF_FILE" >> $GITHUB_ENV
 
-
-      - name: Send PDF report to committer
+      - name: Send PDF report via email
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
@@ -86,26 +85,45 @@ jobs:
           secure: true
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: "[PerfTest] Báo cáo hiệu năng ${{ github.repository }} (${{ github.sha }})"
+          subject: "[PerfTest] Performance Report for ${{ github.repository }} (${{ github.sha }})"
           to: ${{ env.COMMIT_EMAIL }},${{ secrets.EMAIL_OWNER }}
           from: PerfBot <${{ secrets.EMAIL_USERNAME }}>
-          content_type: text/plain
+          content_type: text/html
           body: |
-            Xin chào ${{ env.COMMIT_AUTHOR }},
-
-            Báo cáo hiệu năng CI/CD cho commit này đã xong.
-
-            Đính kèm PDF báo cáo chi tiết.
-
-            Repo: ${{ github.repository }}
-            Branch: ${{ github.ref_name }}
-            Commit: ${{ github.sha }}
-            Ngày: ${{ env.COMMIT_DATE }}
-
-            -- 
-            Automation Performance Framework by leanhhoa30012004
+            <div style="font-family:Segoe UI,Arial,sans-serif;font-size:16px;">
+              <p>Hello <b>${{ env.COMMIT_AUTHOR }}</b>,</p>
+              <p>
+                The automated performance test for your recent commit has finished.<br>
+                Please find the attached PDF report for detailed results.
+              </p>
+              <table style="background:#f7f9fa;padding:12px 20px;border-radius:8px;border:1px solid #e2e2e2;margin:16px 0;">
+                <tr>
+                  <td><b>Repository:</b></td>
+                  <td>${{ github.repository }}</td>
+                </tr>
+                <tr>
+                  <td><b>Branch:</b></td>
+                  <td>${{ github.ref_name }}</td>
+                </tr>
+                <tr>
+                  <td><b>Commit:</b></td>
+                  <td><code>${{ github.sha }}</code></td>
+                </tr>
+                <tr>
+                  <td><b>Date:</b></td>
+                  <td>${{ env.COMMIT_DATE }}</td>
+                </tr>
+              </table>
+              <p>
+                <b>Note:</b> This is an automated message from the CI/CD pipeline.<br>
+                For any questions, please contact the repository maintainer.
+              </p>
+              <p style="color:#888;font-size:13px;margin-top:32px;">
+                &mdash; <i>Automation Performance Framework by leanhhoa30012004</i>
+              </p>
+            </div>
           attachments: ${{ env.PDF_FILE }}
 
-      - name: Fail job if Maven fail
+      - name: Fail job if previous steps failed
         if: failure()
         run: exit 1
