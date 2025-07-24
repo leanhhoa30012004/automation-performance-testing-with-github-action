@@ -90,7 +90,9 @@ jobs:
           from: PerfBot <${{ secrets.EMAIL_USERNAME }}>
           content_type: text/html
           body: |
-            <div style="font-family:Segoe UI,Arial,sans-serif;font-size:16px;">
+            <!DOCTYPE html>
+            <html>
+            <body style="font-family:Segoe UI,Arial,sans-serif;font-size:16px;color:#222;">
               <p>Hello <b>${{ env.COMMIT_AUTHOR }}</b>,</p>
               <p>
                 The automated performance test for your recent commit has finished.<br>
@@ -121,9 +123,9 @@ jobs:
               <p style="color:#888;font-size:13px;margin-top:32px;">
                 &mdash; <i>Automation Performance Framework by leanhhoa30012004</i>
               </p>
-            </div>
+            </body>
+            </html>
           attachments: ${{ env.PDF_FILE }}
-
       - name: Fail job if previous steps failed
         if: failure()
         run: exit 1
