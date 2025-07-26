@@ -30,7 +30,7 @@ public class HttpWorker implements Callable<Void> {
         try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
             for (int i = 0; i < config.getRequestsPerThread(); i++) {
                 executeRequest(httpClient);
-                Thread.sleep(10); // Small delay
+                Thread.sleep(10);
             }
         }
         return null;

@@ -68,7 +68,7 @@ jobs:
           mkdir -p pdf-report
           REPORT_FILE=$(ls -1t reports/*.html | head -1)
           if [ -z "$REPORT_FILE" ]; then
-            echo "❌ Không tìm thấy file HTML báo cáo trong thư mục reports/!"
+            echo "❌ Cannot found lasted file reports/!"
             ls -l reports || true
             exit 1
           fi
@@ -104,7 +104,7 @@ jobs:
           msg['Subject'] = f"[PerfTest] Performance Report for {os.environ['REPO']} ({os.environ['SHA']})"
 
           html = f'''
-          <p>Hello <b>{os.environ['AUTHOR']}</b>,</p>
+          <h5>Hello <b>{os.environ['AUTHOR']}</b>,</h5>
           <p>The automated performance test for your recent commit has finished.<br>
           Please find the attached PDF report for detailed results.</p>
           <ul>
@@ -116,7 +116,7 @@ jobs:
           <p style="color:gray;font-size:smaller;">--<br>Automation Performance Framework by leanhhoa30012004</p>
           '''
           msg.attach(MIMEText(html, 'html'))
-
+                                                                        
           filename = os.environ['PDF_FILE']
           with open(filename, "rb") as f:
               part = MIMEBase('application', 'octet-stream')

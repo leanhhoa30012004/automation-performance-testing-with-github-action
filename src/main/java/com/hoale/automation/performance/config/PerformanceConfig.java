@@ -70,7 +70,6 @@ public class PerformanceConfig {
     public String getFramework() { return framework; }
     public String getCreatedDate() { return createdDate; }
 
-    // Chuyển đổi sang TestConfig
     public TestConfig toTestConfig() {
         return new TestConfig(
                 this.targetUrl,
